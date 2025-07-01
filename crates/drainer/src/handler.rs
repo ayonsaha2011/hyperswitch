@@ -281,7 +281,7 @@ async fn drainer(
         }
     }
 
-    if last_processed_id.is_empty(){
+    if last_processed_id.is_empty() {
         // let entries_trimmed = store
         //     .trim_from_stream(stream_name, &last_processed_id)
         //     .await?;

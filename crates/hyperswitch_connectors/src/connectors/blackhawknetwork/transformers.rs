@@ -1,7 +1,5 @@
 use common_enums::enums;
-use serde::{Deserialize, Serialize};
-use masking::Secret;
-use common_utils::types::{StringMinorUnit};
+use common_utils::types::StringMinorUnit;
 use hyperswitch_domain_models::{
     payment_method_data::PaymentMethodData,
     router_data::{ConnectorAuthType, RouterData},
@@ -11,6 +9,9 @@ use hyperswitch_domain_models::{
     types::{PaymentsAuthorizeRouterData, RefundsRouterData},
 };
 use hyperswitch_interfaces::errors;
+use masking::Secret;
+use serde::{Deserialize, Serialize};
+
 use crate::types::{RefundsResponseRouterData, ResponseRouterData};
 
 //TODO: Fill the struct with respective fields
@@ -19,19 +20,9 @@ pub struct BlackhawknetworkRouterData<T> {
     pub router_data: T,
 }
 
-impl<T>
-    From<(
-        StringMinorUnit,
-        T,
-    )> for BlackhawknetworkRouterData<T>
-{
-    fn from(
-        (amount, item): (
-            StringMinorUnit,
-            T,
-        ),
-    ) -> Self {
-         //Todo :  use utils to convert the amount to the type of amount that a connector accepts
+impl<T> From<(StringMinorUnit, T)> for BlackhawknetworkRouterData<T> {
+    fn from((amount, item): (StringMinorUnit, T)) -> Self {
+        //Todo :  use utils to convert the amount to the type of amount that a connector accepts
         Self {
             amount,
             router_data: item,
@@ -43,7 +34,7 @@ impl<T>
 #[derive(Default, Debug, Serialize, PartialEq)]
 pub struct BlackhawknetworkPaymentsRequest {
     amount: StringMinorUnit,
-    card: BlackhawknetworkCard
+    card: BlackhawknetworkCard,
 }
 
 #[derive(Default, Debug, Serialize, Eq, PartialEq)]
@@ -55,26 +46,30 @@ pub struct BlackhawknetworkCard {
     complete: bool,
 }
 
-impl TryFrom<&BlackhawknetworkRouterData<&PaymentsAuthorizeRouterData>> for BlackhawknetworkPaymentsRequest  {
+impl TryFrom<&BlackhawknetworkRouterData<&PaymentsAuthorizeRouterData>>
+    for BlackhawknetworkPaymentsRequest
+{
     type Error = error_stack::Report<errors::ConnectorError>;
-    fn try_from(item: &BlackhawknetworkRouterData<&PaymentsAuthorizeRouterData>) -> Result<Self,Self::Error> {
+    fn try_from(
+        item: &BlackhawknetworkRouterData<&PaymentsAuthorizeRouterData>,
+    ) -> Result<Self, Self::Error> {
         match item.router_data.request.payment_method_data.clone() {
-            PaymentMethodData::Card(_) => {
-                Err(errors::ConnectorError::NotImplemented("Card payment method not implemented".to_string()).into())
-            },
+            PaymentMethodData::Card(_) => Err(errors::ConnectorError::NotImplemented(
+                "Card payment method not implemented".to_string(),
+            )
+            .into()),
             _ => Err(errors::ConnectorError::NotImplemented("Payment method".to_string()).into()),
         }
-        
     }
 }
 
 //TODO: Fill the struct with respective fields
 // Auth Struct
 pub struct BlackhawknetworkAuthType {
-    pub(super) api_key: Secret<String>
+    pub(super) api_key: Secret<String>,
 }
 
-impl TryFrom<&ConnectorAuthType> for BlackhawknetworkAuthType  {
+impl TryFrom<&ConnectorAuthType> for BlackhawknetworkAuthType {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(auth_type: &ConnectorAuthType) -> Result<Self, Self::Error> {
         match auth_type {
@@ -113,9 +108,13 @@ pub struct BlackhawknetworkPaymentsResponse {
     id: String,
 }
 
-impl<F,T> TryFrom<ResponseRouterData<F, BlackhawknetworkPaymentsResponse, T, PaymentsResponseData>> for RouterData<F, T, PaymentsResponseData> {
+impl<F, T> TryFrom<ResponseRouterData<F, BlackhawknetworkPaymentsResponse, T, PaymentsResponseData>>
+    for RouterData<F, T, PaymentsResponseData>
+{
     type Error = error_stack::Report<errors::ConnectorError>;
-    fn try_from(item: ResponseRouterData<F, BlackhawknetworkPaymentsResponse, T, PaymentsResponseData>) -> Result<Self,Self::Error> {
+    fn try_from(
+        item: ResponseRouterData<F, BlackhawknetworkPaymentsResponse, T, PaymentsResponseData>,
+    ) -> Result<Self, Self::Error> {
         Ok(Self {
             status: common_enums::AttemptStatus::from(item.response.status),
             response: Ok(PaymentsResponseData::TransactionResponse {
@@ -138,12 +137,16 @@ impl<F,T> TryFrom<ResponseRouterData<F, BlackhawknetworkPaymentsResponse, T, Pay
 // Type definition for RefundRequest
 #[derive(Default, Debug, Serialize)]
 pub struct BlackhawknetworkRefundRequest {
-    pub amount: StringMinorUnit
+    pub amount: StringMinorUnit,
 }
 
-impl<F> TryFrom<&BlackhawknetworkRouterData<&RefundsRouterData<F>>> for BlackhawknetworkRefundRequest {
+impl<F> TryFrom<&BlackhawknetworkRouterData<&RefundsRouterData<F>>>
+    for BlackhawknetworkRefundRequest
+{
     type Error = error_stack::Report<errors::ConnectorError>;
-    fn try_from(item: &BlackhawknetworkRouterData<&RefundsRouterData<F>>) -> Result<Self,Self::Error> {
+    fn try_from(
+        item: &BlackhawknetworkRouterData<&RefundsRouterData<F>>,
+    ) -> Result<Self, Self::Error> {
         Ok(Self {
             amount: item.amount.to_owned(),
         })
@@ -176,12 +179,10 @@ impl From<RefundStatus> for enums::RefundStatus {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct RefundResponse {
     id: String,
-    status: RefundStatus
+    status: RefundStatus,
 }
 
-impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>>
-    for RefundsRouterData<Execute>
-{
+impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>> for RefundsRouterData<Execute> {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         item: RefundsResponseRouterData<Execute, RefundResponse>,
@@ -196,10 +197,11 @@ impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>>
     }
 }
 
-impl TryFrom<RefundsResponseRouterData<RSync, RefundResponse>> for RefundsRouterData<RSync>
-{
-     type Error = error_stack::Report<errors::ConnectorError>;
-    fn try_from(item: RefundsResponseRouterData<RSync, RefundResponse>) -> Result<Self,Self::Error> {
+impl TryFrom<RefundsResponseRouterData<RSync, RefundResponse>> for RefundsRouterData<RSync> {
+    type Error = error_stack::Report<errors::ConnectorError>;
+    fn try_from(
+        item: RefundsResponseRouterData<RSync, RefundResponse>,
+    ) -> Result<Self, Self::Error> {
         Ok(Self {
             response: Ok(RefundsResponseData {
                 connector_refund_id: item.response.id.to_string(),
@@ -207,8 +209,8 @@ impl TryFrom<RefundsResponseRouterData<RSync, RefundResponse>> for RefundsRouter
             }),
             ..item.data
         })
-     }
- }
+    }
+}
 
 //TODO: Fill the struct with respective fields
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq)]

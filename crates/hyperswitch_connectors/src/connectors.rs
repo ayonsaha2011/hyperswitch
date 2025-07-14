@@ -12,6 +12,7 @@ pub mod bankofamerica;
 pub mod barclaycard;
 pub mod billwerk;
 pub mod bitpay;
+pub mod blackhawknetwork;
 pub mod bluesnap;
 pub mod boku;
 pub mod braintree;
@@ -142,4 +143,5 @@ pub use self::{
     wellsfargo::Wellsfargo, wellsfargopayout::Wellsfargopayout, wise::Wise, worldline::Worldline,
     worldpay::Worldpay, worldpayvantiv::Worldpayvantiv, worldpayxml::Worldpayxml, xendit::Xendit,
     zen::Zen, zsl::Zsl,
+ blackhawknetwork::Blackhawknetwork,
 };

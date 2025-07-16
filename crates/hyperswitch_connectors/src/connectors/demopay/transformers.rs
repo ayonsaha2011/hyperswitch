@@ -1,20 +1,19 @@
 use common_enums::enums;
 use serde::{Deserialize, Serialize};
-use masking::Secret;
-use masking::ExposeInterface;
+use masking::{Secret, ExposeInterface, PeekInterface};
 use common_utils::types::{StringMinorUnit};
 use router_env;
 use hyperswitch_domain_models::{
     payment_method_data::PaymentMethodData,
     router_data::{ConnectorAuthType, RouterData},
-    router_flow_types::refunds::{Execute, RSync},
-    router_request_types::ResponseId,
+    router_flow_types::{payments::{Capture, PSync}, refunds::{Execute, RSync}},
+    router_request_types::{PaymentsCaptureData, PaymentsSyncData, ResponseId},
     router_response_types::{PaymentsResponseData, RefundsResponseData},
     types::{PaymentsAuthorizeRouterData, PaymentsCaptureRouterData, RefundsRouterData},
 };
 use hyperswitch_interfaces::errors;
 use crate::types::{RefundsResponseRouterData, ResponseRouterData};
-use crate::utils::WalletData;
+use crate::utils::{WalletData, PaymentsAuthorizeRequestData};
 
 pub struct DemopayRouterData<T> {
     pub amount: StringMinorUnit,
@@ -149,14 +148,54 @@ impl From<DemopayPaymentStatus> for common_enums::AttemptStatus {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DemopayPaymentsResponse {
-    status: DemopayPaymentStatus,
-    id: String,
-    message: Option<String>,
+    pub status: DemopayPaymentStatus,
+    pub id: String,
+    pub message: Option<String>,
 }
 
-impl<F,T> TryFrom<ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResponseData>> for RouterData<F, T, PaymentsResponseData> {
+impl<F,T: PaymentsAuthorizeRequestData> TryFrom<ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResponseData>> for RouterData<F, T, PaymentsResponseData> {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResponseData>) -> Result<Self,Self::Error> {
+        // Extract wallet_id from the request for logging
+        let meta_binding = item.data.request.get_metadata_as_object();
+        let wallet_id = if let Some(meta) = &meta_binding {
+            meta.peek().get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        } else {
+            "unknown"
+        };
+        
+        // Log the response status
+        router_env::logger::info!(
+            wallet_id = %wallet_id,
+            status = ?item.response.status,
+            transaction_id = %item.response.id,
+            "Payment response received"
+        );
+        
+        Ok(Self {
+            status: common_enums::AttemptStatus::from(item.response.status),
+            response: Ok(PaymentsResponseData::TransactionResponse {
+                resource_id: ResponseId::ConnectorTransactionId(item.response.id.clone()),
+                redirection_data: Box::new(None),
+                mandate_reference: Box::new(None),
+                connector_metadata: Some(serde_json::json!({
+                    "wallet_id": wallet_id,
+                    "demopay_transaction_id": item.response.id
+                })),
+                network_txn_id: None,
+                connector_response_reference_id: Some(item.response.id),
+                incremental_authorization_allowed: None,
+                charges: None,
+            }),
+            ..item.data
+        })
+    }
+}
+
+// TryFrom implementation for PSync flow
+impl TryFrom<ResponseRouterData<PSync, DemopayPaymentsResponse, PaymentsSyncData, PaymentsResponseData>> for RouterData<PSync, PaymentsSyncData, PaymentsResponseData> {
+    type Error = error_stack::Report<errors::ConnectorError>;
+    fn try_from(item: ResponseRouterData<PSync, DemopayPaymentsResponse, PaymentsSyncData, PaymentsResponseData>) -> Result<Self,Self::Error> {
         // Extract wallet_id from the request for logging
         let wallet_id = if let Some(meta) = &item.data.request.connector_meta {
             meta.get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
@@ -169,7 +208,46 @@ impl<F,T> TryFrom<ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResp
             wallet_id = %wallet_id,
             status = ?item.response.status,
             transaction_id = %item.response.id,
-            "Payment response received"
+            "Payment sync response received"
+        );
+        
+        Ok(Self {
+            status: common_enums::AttemptStatus::from(item.response.status),
+            response: Ok(PaymentsResponseData::TransactionResponse {
+                resource_id: ResponseId::ConnectorTransactionId(item.response.id.clone()),
+                redirection_data: Box::new(None),
+                mandate_reference: Box::new(None),
+                connector_metadata: Some(serde_json::json!({
+                    "wallet_id": wallet_id,
+                    "demopay_transaction_id": item.response.id
+                })),
+                network_txn_id: None,
+                connector_response_reference_id: Some(item.response.id),
+                incremental_authorization_allowed: None,
+                charges: None,
+            }),
+            ..item.data
+        })
+    }
+}
+
+// TryFrom implementation for Capture flow
+impl TryFrom<ResponseRouterData<Capture, DemopayPaymentsResponse, PaymentsCaptureData, PaymentsResponseData>> for RouterData<Capture, PaymentsCaptureData, PaymentsResponseData> {
+    type Error = error_stack::Report<errors::ConnectorError>;
+    fn try_from(item: ResponseRouterData<Capture, DemopayPaymentsResponse, PaymentsCaptureData, PaymentsResponseData>) -> Result<Self,Self::Error> {
+        // Extract wallet_id from the request for logging
+        let wallet_id = if let Some(meta) = &item.data.request.connector_meta {
+            meta.get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        } else {
+            "unknown"
+        };
+        
+        // Log the response status
+        router_env::logger::info!(
+            wallet_id = %wallet_id,
+            status = ?item.response.status,
+            transaction_id = %item.response.id,
+            "Payment capture response received"
         );
         
         Ok(Self {
@@ -241,9 +319,9 @@ impl From<RefundStatus> for enums::RefundStatus {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct RefundResponse {
-    id: String,
-    status: RefundStatus,
-    message: Option<String>,
+    pub id: String,
+    pub status: RefundStatus,
+    pub message: Option<String>,
 }
 
 impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>>

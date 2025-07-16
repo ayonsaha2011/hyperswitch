@@ -515,6 +515,7 @@ impl Connector {
             | Self::Stripe
             | Self::Datatrans => false,
             Self::Checkout | Self::Nmi |Self::Cybersource | Self::Archipel => true,
+            Self::Demopay => false,
         }
     }
 
@@ -670,6 +671,7 @@ impl From<RoutableConnectors> for Connector {
             RoutableConnectors::Inespay => Self::Inespay,
             RoutableConnectors::Coingate => Self::Coingate,
             RoutableConnectors::Hipay => Self::Hipay,
+            RoutableConnectors::Demopay => Self::Demopay,
         }
     }
 }
@@ -792,6 +794,7 @@ impl TryFrom<Connector> for RoutableConnectors {
             Connector::Hipay => Ok(Self::Hipay),
             Connector::Inespay => Ok(Self::Inespay),
             Connector::Redsys => Ok(Self::Redsys),
+            Connector::Demopay => Ok(Self::Demopay),
             Connector::CtpMastercard
             | Connector::Gpayments
             | Connector::HyperswitchVault

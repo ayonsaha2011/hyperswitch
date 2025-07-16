@@ -1,8 +1,8 @@
 pub mod transformers;
 
-use error_stack::{report, ResultExt};
+use error_stack::ResultExt;
 use masking::{ExposeInterface, Mask};
-use uuid::Uuid;
+
 
 use common_utils::{
     errors::CustomResult,
@@ -40,14 +40,14 @@ use hyperswitch_interfaces::{
     types::{self, Response},
     webhooks,
 };
-use std::sync::LazyLock;
+
 
 use common_enums::enums;
 use hyperswitch_domain_models::router_response_types::{ConnectorInfo, SupportedPaymentMethods};
 use crate::{
     constants::headers,
     types::ResponseRouterData,
-    utils,
+    utils::{self, WalletData},
 };
 use hyperswitch_domain_models::payment_method_data::PaymentMethodData;
 
@@ -462,7 +462,7 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         req: &PaymentsCaptureRouterData,
         connectors: &Connectors,
     ) -> CustomResult<String, errors::ConnectorError> {
-        let transaction_id = match &req.request.connector_transaction_id {
+        let _transaction_id = match &req.request.connector_transaction_id {
             id if !id.is_empty() => id.clone(),
             _ => return Err(errors::ConnectorError::MissingConnectorTransactionID.into()),
         };

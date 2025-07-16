@@ -46,6 +46,7 @@ impl ForeignTryFrom<api_enums::Connector> for common_enums::RoutableConnectors {
             api_enums::Connector::Datatrans => Self::Datatrans,
             api_enums::Connector::Deutschebank => Self::Deutschebank,
             api_enums::Connector::Digitalvirgo => Self::Digitalvirgo,
+            api_enums::Connector::Demopay => Self::Demopay,
             api_enums::Connector::Dlocal => Self::Dlocal,
             // api_enums::Connector::Dwolla => Self::Dwolla,
             api_enums::Connector::Ebanx => Self::Ebanx,

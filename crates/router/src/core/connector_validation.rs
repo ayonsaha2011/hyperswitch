@@ -191,6 +191,10 @@ impl ConnectorAuthTypeAndMetadataValidation<'_> {
                 digitalvirgo::transformers::DigitalvirgoAuthType::try_from(self.auth_type)?;
                 Ok(())
             }
+            api_enums::Connector::Demopay => {
+                demopay::transformers::DemopayAuthType::try_from(self.auth_type)?;
+                Ok(())
+            }
             api_enums::Connector::Dlocal => {
                 dlocal::transformers::DlocalAuthType::try_from(self.auth_type)?;
                 Ok(())

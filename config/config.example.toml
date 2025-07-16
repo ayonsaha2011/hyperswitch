@@ -34,8 +34,8 @@ url = "http://localhost:5000" # URL of the encryption service
 
 # Main SQL data store credentials
 [master_database]
-username = "db_user"      # DB Username
-password = "db_pass"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
+username = "postgres"      # DB Username
+password = "as"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
 host = "localhost"        # DB Host
 port = 5432               # DB Port
 dbname = "hyperswitch_db" # Name of Database
@@ -212,6 +212,7 @@ coingate.base_url = "https://api-sandbox.coingate.com"
 cryptopay.base_url = "https://business-sandbox.cryptopay.me"
 cybersource.base_url = "https://apitest.cybersource.com/"
 datatrans.base_url = "https://api.sandbox.datatrans.com/"
+demopay.base_url = "http://localhost:3005"
 datatrans.secondary_base_url = "https://pay.sandbox.datatrans.com/"
 deutschebank.base_url = "https://testmerch.directpos.de/rest-api"
 digitalvirgo.base_url = "https://dcb-integration-service-sandbox-external.staging.digitalvirgo.pl"
@@ -946,8 +947,8 @@ host = ""          # Clickhouse host in http(s)://<URL>:<PORT> format
 database_name = "" # Clickhouse database name
 
 [analytics.sqlx]
-username = "db_user"      # Analytics DB Username
-password = "db_pass"      # Analytics DB Password
+username = "postgres"      # Analytics DB Username
+password = "as"      # Analytics DB Password
 host = "localhost"        # Analytics DB Host
 port = 5432               # Analytics DB Port
 dbname = "hyperswitch_db" # Name of Database

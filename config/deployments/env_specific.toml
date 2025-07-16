@@ -12,8 +12,8 @@ source = "sqlx" # The Analytics source/strategy to be used
 forex_enabled = false # Boolean to enable or disable forex conversion
 
 [analytics.sqlx]
-username = "db_user"      # Analytics DB Username
-password = "db_pass"      # Analytics DB Password
+username = "postgres"      # Analytics DB Username
+password = "as"      # Analytics DB Password
 host = "localhost"        # Analytics DB Host
 port = 5432               # Analytics DB Port
 dbname = "hyperswitch_db" # Name of Database
@@ -162,8 +162,8 @@ merchant_id_auth_enabled = false
 
 # Main SQL data store credentials
 [master_database]
-username = "db_user"      # DB Username
-password = "db_pass"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
+username = "postgres"      # DB Username
+password = "as"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
 host = "localhost"        # DB Host
 port = 5432               # DB Port
 dbname = "hyperswitch_db" # Name of Database

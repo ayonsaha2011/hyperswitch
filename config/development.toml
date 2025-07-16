@@ -17,8 +17,8 @@ enabled = false
 
 # TODO: Update database credentials before running application
 [master_database]
-username = "db_user"
-password = "db_pass"
+username = "postgres"
+password = "as"
 host = "localhost"
 port = 5432
 dbname = "hyperswitch_db"
@@ -27,8 +27,8 @@ connection_timeout = 10
 min_idle = 2
 
 [replica_database]
-username = "db_user"
-password = "db_pass"
+username = "postgres"
+password = "as"
 host = "localhost"
 port = 5432
 dbname = "hyperswitch_db"
@@ -251,6 +251,7 @@ coingate.base_url = "https://api-sandbox.coingate.com"
 cryptopay.base_url = "https://business-sandbox.cryptopay.me"
 cybersource.base_url = "https://apitest.cybersource.com/"
 datatrans.base_url = "https://api.sandbox.datatrans.com/"
+demopay.base_url = "http://localhost:3005"
 datatrans.secondary_base_url = "https://pay.sandbox.datatrans.com/"
 deutschebank.base_url = "https://testmerch.directpos.de/rest-api"
 digitalvirgo.base_url = "https://dcb-integration-service-sandbox-external.staging.digitalvirgo.pl"
@@ -1109,8 +1110,8 @@ host = "http://localhost:8123"
 database_name = "default"
 
 [analytics.sqlx]
-username = "db_user"
-password = "db_pass"
+username = "postgres"
+password = "as"
 host = "localhost"
 port = 5432
 dbname = "hyperswitch_db"

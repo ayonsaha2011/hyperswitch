@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use masking::Secret;
 use masking::ExposeInterface;
 use common_utils::types::{StringMinorUnit};
+use router_env;
 use hyperswitch_domain_models::{
     payment_method_data::PaymentMethodData,
     router_data::{ConnectorAuthType, RouterData},
@@ -47,13 +48,36 @@ pub struct DemopayPaymentsRequest {
     reference: String,
 }
 
+// Helper function to determine payment behavior based on wallet_id
+fn get_payment_behavior(wallet_id: &str) -> DemopayPaymentBehavior {
+    match wallet_id {
+        "abc" => DemopayPaymentBehavior::AuthorizeFailCaptureFail,
+        "def" => DemopayPaymentBehavior::AuthorizePassCaptureFail,
+        "xyz" => DemopayPaymentBehavior::AuthorizePassCapturePass,
+        _ => DemopayPaymentBehavior::AuthorizePassCapturePass, // Default behavior
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DemopayPaymentBehavior {
+    AuthorizeFailCaptureFail,
+    AuthorizePassCaptureFail,
+    AuthorizePassCapturePass,
+}
+
 impl TryFrom<&DemopayRouterData<&PaymentsAuthorizeRouterData>> for DemopayPaymentsRequest {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: &DemopayRouterData<&PaymentsAuthorizeRouterData>) -> Result<Self, Self::Error> {
         match item.router_data.request.payment_method_data.clone() {
             PaymentMethodData::Wallet(ref wallet_data) => {
                 // Extract wallet_id from wallet data
-                let wallet_id = wallet_data.get_wallet_token().map(|s| s.expose()).map_err(|_| errors::ConnectorError::MissingRequiredField { field_name: "wallet_id" })?;
+                let wallet_id = wallet_data.get_wallet_token()
+                    .map(|s| s.expose())
+                    .map_err(|_| errors::ConnectorError::MissingRequiredField { field_name: "wallet_id" })?;
+                
+                // Log the wallet_id for debugging
+                router_env::logger::info!(wallet_id = %wallet_id, "Processing payment with wallet_id");
+                
                 Ok(Self {
                     amount: item.amount.to_owned(),
                     wallet_id,
@@ -73,6 +97,10 @@ impl TryFrom<&DemopayRouterData<&PaymentsCaptureRouterData>> for DemopayPayments
         let wallet_id = item.router_data.request.connector_meta.as_ref()
             .and_then(|meta| meta.get("wallet_id").and_then(|v| v.as_str().map(|s| s.to_string())))
             .unwrap_or_else(|| "demo_wallet_id".to_string());
+        
+        // Log the wallet_id for debugging
+        router_env::logger::info!(wallet_id = %wallet_id, "Processing capture with wallet_id");
+        
         Ok(Self {
             amount: item.amount.to_owned(),
             wallet_id,
@@ -129,13 +157,31 @@ pub struct DemopayPaymentsResponse {
 impl<F,T> TryFrom<ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResponseData>> for RouterData<F, T, PaymentsResponseData> {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: ResponseRouterData<F, DemopayPaymentsResponse, T, PaymentsResponseData>) -> Result<Self,Self::Error> {
+        // Extract wallet_id from the request for logging
+        let wallet_id = if let Some(meta) = &item.data.request.connector_meta {
+            meta.get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        } else {
+            "unknown"
+        };
+        
+        // Log the response status
+        router_env::logger::info!(
+            wallet_id = %wallet_id,
+            status = ?item.response.status,
+            transaction_id = %item.response.id,
+            "Payment response received"
+        );
+        
         Ok(Self {
             status: common_enums::AttemptStatus::from(item.response.status),
             response: Ok(PaymentsResponseData::TransactionResponse {
                 resource_id: ResponseId::ConnectorTransactionId(item.response.id.clone()),
                 redirection_data: Box::new(None),
                 mandate_reference: Box::new(None),
-                connector_metadata: None,
+                connector_metadata: Some(serde_json::json!({
+                    "wallet_id": wallet_id,
+                    "demopay_transaction_id": item.response.id
+                })),
                 network_txn_id: None,
                 connector_response_reference_id: Some(item.response.id),
                 incremental_authorization_allowed: None,
@@ -158,6 +204,14 @@ impl<F> TryFrom<&DemopayRouterData<&RefundsRouterData<F>>> for DemopayRefundRequ
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: &DemopayRouterData<&RefundsRouterData<F>>) -> Result<Self,Self::Error> {
         let transaction_id = item.router_data.request.connector_transaction_id.clone();
+        
+        // Log refund request
+        router_env::logger::info!(
+            transaction_id = %transaction_id,
+            amount = %item.amount,
+            "Processing refund request"
+        );
+        
         Ok(Self {
             amount: item.amount.to_owned(),
             transaction_id,
@@ -199,6 +253,13 @@ impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>>
     fn try_from(
         item: RefundsResponseRouterData<Execute, RefundResponse>,
     ) -> Result<Self, Self::Error> {
+        // Log refund response
+        router_env::logger::info!(
+            refund_id = %item.response.id,
+            status = ?item.response.status,
+            "Refund response received"
+        );
+        
         Ok(Self {
             response: Ok(RefundsResponseData {
                 connector_refund_id: item.response.id.to_string(),
@@ -213,6 +274,13 @@ impl TryFrom<RefundsResponseRouterData<RSync, RefundResponse>> for RefundsRouter
 {
     type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: RefundsResponseRouterData<RSync, RefundResponse>) -> Result<Self,Self::Error> {
+        // Log refund sync response
+        router_env::logger::info!(
+            refund_id = %item.response.id,
+            status = ?item.response.status,
+            "Refund sync response received"
+        );
+        
         Ok(Self {
             response: Ok(RefundsResponseData {
                 connector_refund_id: item.response.id.to_string(),

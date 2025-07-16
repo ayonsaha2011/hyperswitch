@@ -2,6 +2,7 @@ pub mod transformers;
 
 use error_stack::{report, ResultExt};
 use masking::{ExposeInterface, Mask};
+use uuid::Uuid;
 
 use common_utils::{
     errors::CustomResult,
@@ -61,6 +62,80 @@ impl Demopay {
     pub fn new() -> &'static Self {
         &Self {
             amount_converter: &StringMinorUnitForConnector
+        }
+    }
+}
+
+// Helper function to determine payment behavior based on wallet_id
+fn get_payment_behavior(wallet_id: &str) -> demopay::DemopayPaymentBehavior {
+    match wallet_id {
+        "abc" => demopay::DemopayPaymentBehavior::AuthorizeFailCaptureFail,
+        "def" => demopay::DemopayPaymentBehavior::AuthorizePassCaptureFail,
+        "xyz" => demopay::DemopayPaymentBehavior::AuthorizePassCapturePass,
+        _ => demopay::DemopayPaymentBehavior::AuthorizePassCapturePass, // Default behavior
+    }
+}
+
+// Helper function to create mock response based on wallet_id and operation
+fn create_mock_response(wallet_id: &str, operation: &str) -> demopay::DemopayPaymentsResponse {
+    let behavior = get_payment_behavior(wallet_id);
+    
+    match (operation, behavior) {
+        ("authorize", demopay::DemopayPaymentBehavior::AuthorizeFailCaptureFail) => {
+            router_env::logger::warn!(wallet_id = %wallet_id, "Authorize failed for wallet_id: abc");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Failed,
+                id: format!("txn_fail_{}", uuid::Uuid::new_v4()),
+                message: Some("Authorization failed for wallet_id: abc".to_string()),
+            }
+        },
+        ("authorize", demopay::DemopayPaymentBehavior::AuthorizePassCaptureFail) => {
+            router_env::logger::info!(wallet_id = %wallet_id, "Authorize succeeded for wallet_id: def");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Succeeded,
+                id: format!("txn_success_{}", uuid::Uuid::new_v4()),
+                message: Some("Authorization succeeded for wallet_id: def".to_string()),
+            }
+        },
+        ("authorize", demopay::DemopayPaymentBehavior::AuthorizePassCapturePass) => {
+            router_env::logger::info!(wallet_id = %wallet_id, "Authorize succeeded for wallet_id: xyz");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Succeeded,
+                id: format!("txn_success_{}", uuid::Uuid::new_v4()),
+                message: Some("Authorization succeeded for wallet_id: xyz".to_string()),
+            }
+        },
+        ("capture", demopay::DemopayPaymentBehavior::AuthorizeFailCaptureFail) => {
+            router_env::logger::warn!(wallet_id = %wallet_id, "Capture failed for wallet_id: abc");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Failed,
+                id: format!("capture_fail_{}", uuid::Uuid::new_v4()),
+                message: Some("Capture failed for wallet_id: abc".to_string()),
+            }
+        },
+        ("capture", demopay::DemopayPaymentBehavior::AuthorizePassCaptureFail) => {
+            router_env::logger::warn!(wallet_id = %wallet_id, "Capture failed for wallet_id: def");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Failed,
+                id: format!("capture_fail_{}", uuid::Uuid::new_v4()),
+                message: Some("Capture failed for wallet_id: def".to_string()),
+            }
+        },
+        ("capture", demopay::DemopayPaymentBehavior::AuthorizePassCapturePass) => {
+            router_env::logger::info!(wallet_id = %wallet_id, "Capture succeeded for wallet_id: xyz");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Succeeded,
+                id: format!("capture_success_{}", uuid::Uuid::new_v4()),
+                message: Some("Capture succeeded for wallet_id: xyz".to_string()),
+            }
+        },
+        _ => {
+            router_env::logger::info!(wallet_id = %wallet_id, operation = %operation, "Default success response");
+            demopay::DemopayPaymentsResponse {
+                status: demopay::DemopayPaymentStatus::Succeeded,
+                id: format!("txn_default_{}", uuid::Uuid::new_v4()),
+                message: Some("Operation completed successfully".to_string()),
+            }
         }
     }
 }
@@ -143,7 +218,7 @@ impl ConnectorCommon for Demopay {
             .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
 
         event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        router_env::logger::error!(connector_response=?response, "Demopay error response received");
 
         Ok(ErrorResponse {
             status_code: res.status_code,
@@ -264,14 +339,23 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
     ) -> CustomResult<PaymentsAuthorizeRouterData, errors::ConnectorError> {
-        let response: demopay::DemopayPaymentsResponse = res
-            .response
-            .parse_struct("Demopay PaymentsAuthorizeResponse")
-            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
-        event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        // Extract wallet_id for mock response logic
+        let wallet_id = if let PaymentMethodData::Wallet(ref wallet_data) = &data.request.payment_method_data {
+            wallet_data.get_wallet_token()
+                .map(|s| s.expose())
+                .unwrap_or_else(|_| "unknown".to_string())
+        } else {
+            "unknown".to_string()
+        };
+
+        // For demo purposes, create mock response based on wallet_id
+        let mock_response = create_mock_response(&wallet_id, "authorize");
+        
+        event_builder.map(|i| i.set_response_body(&mock_response));
+        router_env::logger::info!(connector_response=?mock_response, "Demopay authorize response created");
+        
         RouterData::try_from(ResponseRouterData {
-            response,
+            response: mock_response,
             data: data.clone(),
             http_code: res.status_code,
         })
@@ -332,14 +416,20 @@ impl ConnectorIntegration<PSync, PaymentsSyncData, PaymentsResponseData> for Dem
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
     ) -> CustomResult<PaymentsSyncRouterData, errors::ConnectorError> {
-        let response: demopay::DemopayPaymentsResponse = res
-            .response
-            .parse_struct("Demopay PaymentsSyncResponse")
-            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
-        event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        // For sync, return the same status as the original transaction
+        let wallet_id = if let Some(meta) = &data.request.connector_meta {
+            meta.get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        } else {
+            "unknown"
+        };
+
+        let mock_response = create_mock_response(wallet_id, "sync");
+        
+        event_builder.map(|i| i.set_response_body(&mock_response));
+        router_env::logger::info!(connector_response=?mock_response, "Demopay sync response created");
+        
         RouterData::try_from(ResponseRouterData {
-            response,
+            response: mock_response,
             data: data.clone(),
             http_code: res.status_code,
         })
@@ -423,14 +513,21 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
     ) -> CustomResult<PaymentsCaptureRouterData, errors::ConnectorError> {
-        let response: demopay::DemopayPaymentsResponse = res
-            .response
-            .parse_struct("Demopay PaymentsCaptureResponse")
-            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
-        event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        // Extract wallet_id from connector metadata
+        let wallet_id = if let Some(meta) = &data.request.connector_meta {
+            meta.get("wallet_id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        } else {
+            "unknown"
+        };
+
+        // Create mock response based on wallet_id
+        let mock_response = create_mock_response(wallet_id, "capture");
+        
+        event_builder.map(|i| i.set_response_body(&mock_response));
+        router_env::logger::info!(connector_response=?mock_response, "Demopay capture response created");
+        
         RouterData::try_from(ResponseRouterData {
-            response,
+            response: mock_response,
             data: data.clone(),
             http_code: res.status_code,
         })
@@ -496,14 +593,18 @@ impl ConnectorIntegration<Execute, RefundsData, RefundsResponseData> for Demopay
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
     ) -> CustomResult<RefundsRouterData<Execute>, errors::ConnectorError> {
-        let response: demopay::RefundResponse = res
-            .response
-            .parse_struct("Demopay RefundResponse")
-            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
-        event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        // Create mock refund response
+        let mock_response = demopay::RefundResponse {
+            id: format!("refund_{}", uuid::Uuid::new_v4()),
+            status: demopay::RefundStatus::Succeeded,
+            message: Some("Refund processed successfully".to_string()),
+        };
+        
+        event_builder.map(|i| i.set_response_body(&mock_response));
+        router_env::logger::info!(connector_response=?mock_response, "Demopay refund response created");
+        
         RouterData::try_from(ResponseRouterData {
-            response,
+            response: mock_response,
             data: data.clone(),
             http_code: res.status_code,
         })
@@ -553,14 +654,18 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Demopay {
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
     ) -> CustomResult<RefundSyncRouterData, errors::ConnectorError> {
-        let response: demopay::RefundResponse = res
-            .response
-            .parse_struct("Demopay RefundSyncResponse")
-            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
-        event_builder.map(|i| i.set_response_body(&response));
-        router_env::logger::info!(connector_response=?response);
+        // Create mock refund sync response
+        let mock_response = demopay::RefundResponse {
+            id: data.request.connector_refund_id.clone().unwrap_or_else(|| format!("refund_sync_{}", uuid::Uuid::new_v4())),
+            status: demopay::RefundStatus::Succeeded,
+            message: Some("Refund sync completed successfully".to_string()),
+        };
+        
+        event_builder.map(|i| i.set_response_body(&mock_response));
+        router_env::logger::info!(connector_response=?mock_response, "Demopay refund sync response created");
+        
         RouterData::try_from(ResponseRouterData {
-            response,
+            response: mock_response,
             data: data.clone(),
             http_code: res.status_code,
         })
